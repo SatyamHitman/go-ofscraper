@@ -1,4 +1,60 @@
+# Binaries
 *.exe
 *.dll
 *.so
 *.dylib
+bin/
+
+# Auth and credentials (NEVER commit these)
+auth.json
+*.auth
+.env
+.env.*
+
+# Config files with potential secrets
+config.json
+
+# Widevine DRM keys
+device_private_key
+device_client_id_blob
+*.pem
+*.key
+*.wvd
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+
+# Downloaded content
+data/
+Data/
+
+# Docker volume mounts
+config/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Tool directories
+.claude/
+
+# Test artifacts
+coverage.out
+*.test
+
+# Vendor (if used)
+vendor/
