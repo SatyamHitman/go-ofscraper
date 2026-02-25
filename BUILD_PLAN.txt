@@ -1,0 +1,539 @@
+================================================================================
+GOFSCRAPER: COMPLETE GO REWRITE OF OF-SCRAPER — MASTER BUILD PLAN
+================================================================================
+Created: 2026-02-25
+Module: gofscraper
+Location: ./go-ofscraper/
+Total Go source files: ~232 (excluding auto-generated sqlc ~12 files and tests)
+
+================================================================================
+STATUS TRACKER
+================================================================================
+
+[DONE] Phase 1:  Scaffolding
+[TODO] Phase 2:  Domain Models (internal/model/)
+[TODO] Phase 3:  Config + Env (internal/config/ + internal/config/env/)
+[TODO] Phase 4:  Logging (internal/logging/)
+[TODO] Phase 5:  Utilities (internal/utils/ + internal/paths/)
+[TODO] Phase 6:  Cache (internal/cache/)
+[TODO] Phase 7:  Database (internal/db/)
+[TODO] Phase 8:  Hashing (internal/hash/)
+[TODO] Phase 9:  Auth (internal/auth/ + internal/auth/providers/)
+[TODO] Phase 10: HTTP Session (internal/http/)
+[TODO] Phase 11: API Client (internal/api/)
+[TODO] Phase 12: Filters (internal/filter/)
+[TODO] Phase 13: Prompts (internal/prompts/)
+[TODO] Phase 14: DRM (internal/drm/)
+[TODO] Phase 15: Download System (internal/download/)
+[TODO] Phase 16: Scripts (internal/scripts/)
+[TODO] Phase 17: Worker Pool (internal/worker/)
+[TODO] Phase 18: TUI (internal/tui/)
+[TODO] Phase 19: Commands + CLI (internal/commands/ + internal/cli/)
+[TODO] Phase 20: App Orchestrator + Entry Point (internal/app/ + cmd/)
+
+================================================================================
+TECHNOLOGY CHOICES
+================================================================================
+
+| Concern         | Go Library                                    |
+|-----------------|-----------------------------------------------|
+| CLI             | spf13/cobra                                   |
+| Config          | spf13/viper                                   |
+| TUI             | charmbracelet/bubbletea + bubbles + lipgloss  |
+| Database        | modernc.org/sqlite + sqlc                     |
+| HTTP            | net/http (stdlib) + golang.org/x/net/http2    |
+| Hashing         | zeebo/xxh3                                    |
+| Retry           | avast/retry-go/v4                             |
+| Rate Limit      | golang.org/x/time/rate                        |
+| Scheduler       | go-co-op/gocron/v2                            |
+| Logging         | log/slog + lmittmann/tint                     |
+| DRM/DASH        | custom MPD parser + FFmpeg exec               |
+| Discord         | gtuk/discordwebhook                           |
+| Path sanitize   | flytam/filenamify                             |
+| Browser cookies | kooky or manual SQLite                        |
+| Humanize sizes  | dustin/go-humanize                            |
+| Date/time       | stdlib time                                   |
+
+================================================================================
+PHASE 1: SCAFFOLDING (DONE)
+================================================================================
+
+Files created:
+  go-ofscraper/go.mod                   - Module init (gofscraper)
+  go-ofscraper/Makefile                 - Build targets (build, test, lint, clean, generate)
+  go-ofscraper/pkg/version/version.go   - Version info (ldflags at build time)
+  go-ofscraper/cmd/gofscraper/main.go   - Entry point (placeholder)
+  go-ofscraper/Dockerfile               - Multi-stage Alpine build
+  go-ofscraper/docker-compose.yml       - Docker compose config
+  go-ofscraper/.goreleaser.yml          - Cross-platform release config
+  go-ofscraper/sqlc.yaml                - sqlc code generation config
+  go-ofscraper/plugins.go               - Plugin system placeholder
+
+Directory structure created for ALL packages (internal/app, auth, api, cache,
+cli, commands, config, db, download, drm, filter, hash, http, logging, model,
+paths, posts, prompts, scripts, tui, utils, worker, pkg/version, test/).
+
+================================================================================
+PHASE 2: DOMAIN MODELS (internal/model/) — 7 files
+================================================================================
+
+Files to create:
+  internal/model/base.go         - Text truncation, filename cleanup, DB cleanup
+  internal/model/media.go        - Media struct (id, post_id, url, mpd, type, etc.)
+  internal/model/post.go         - Post struct (id, text, price, media list, etc.)
+  internal/model/user.go         - User/Model struct (id, name, prices, subs, etc.)
+  internal/model/label.go        - Label struct (id, name, type, posts)
+  internal/model/placeholder.go  - Path template expansion ({model_username}, etc.)
+  internal/model/retriever.go    - Subscription retrieval patterns
+
+Key types:
+  - MediaType enum: Images, Videos, Audios, Texts, ForcedSkipped
+  - ResponseType enum: Timeline, Archived, Pinned, Streams, Stories, Highlights, Profile, Messages
+  - DownloadType enum: Normal, Protected
+  - DownloadStatus enum: Succeeded, Failed, Skipped
+  - MetadataStatus enum: Changed, Unchanged, Failed, Skipped
+
+================================================================================
+PHASE 3: CONFIG + ENV (internal/config/) — 39 files
+================================================================================
+
+Files to create:
+  internal/config/constants.go   - All constants (KEY_OPTIONS, DYNAMIC_OPTIONS, etc.)
+  internal/config/config.go      - Viper setup + load
+  internal/config/schema.go      - Config schema + all defaults
+  internal/config/data.go        - Config value accessor functions
+  internal/config/file.go        - Config file read/write
+  internal/config/menu.go        - Config menu operations
+  internal/config/context.go     - Config context helpers
+  internal/config/wrapper.go     - Config reader wrapper
+  internal/config/profile.go     - Profile management
+  internal/config/settings.go    - Settings resolution (CLI > config > env > defaults)
+
+  internal/config/env/env.go          - Env var loader
+  internal/config/env/general.go      - APP_TOKEN, defaults, placeholders
+  internal/config/env/url.go          - API endpoint URL templates (ALL endpoints)
+  internal/config/env/url_dynamic.go  - Dynamic rule source URLs
+  internal/config/env/url_other.go    - Other URL env vars
+  internal/config/env/api.go          - API constants
+  internal/config/env/auth.go         - Auth env vars
+  internal/config/env/ratelimit.go    - Rate limit env vars
+  internal/config/env/req.go          - Request env vars (timeouts, connections, sems)
+  internal/config/env/cdm.go          - CDM env vars
+  internal/config/env/mpd.go          - MPD env vars
+  internal/config/env/discord.go      - Discord env vars
+  internal/config/env/git.go          - Git env vars
+  internal/config/env/anon.go         - Anon env vars (user agent)
+  internal/config/env/download.go     - Download action env vars
+  internal/config/env/like.go         - Like action env vars
+  internal/config/env/metadata_env.go - Metadata action env vars
+  internal/config/env/date.go         - Date env vars
+  internal/config/env/dynamic.go      - Dynamic env vars
+  internal/config/env/list.go         - List env vars
+  internal/config/env/live.go         - Live display env vars
+  internal/config/env/logger.go       - Logger env vars
+  internal/config/env/prompts.go      - Prompt env vars
+  internal/config/env/rich.go         - Rich display env vars
+  internal/config/env/system.go       - System env vars
+  internal/config/env/time.go         - Time/expiry env vars
+  internal/config/env/path_bytes.go   - Path bytes env vars
+  internal/config/env/path_files.go   - Path files env vars
+  internal/config/env/path_general.go - Path general env vars
+  internal/config/env/path_length.go  - Path length env vars
+
+================================================================================
+PHASE 4: LOGGING (internal/logging/) — 12 files
+================================================================================
+
+Files to create:
+  internal/logging/logging.go       - slog setup + tint handler init
+  internal/logging/logs.go          - Log operations (write, rotate)
+  internal/logging/close.go         - Log shutdown / flush
+  internal/logging/stdout.go        - Stdout handler
+  internal/logging/other.go         - Other log utils
+  internal/logging/classes.go       - Log class definitions (multihandler)
+  internal/logging/discord.go       - Discord webhook log handler
+  internal/logging/file_handler.go  - File log handler
+  internal/logging/text_handler.go  - Text formatter handler
+  internal/logging/level.go         - Log level parsing + custom levels
+  internal/logging/sensitive.go     - Sensitive data redaction filter
+  internal/logging/trace.go         - Trace-level logging support
+
+================================================================================
+PHASE 5: UTILITIES (internal/utils/ + internal/paths/) — 24 files
+================================================================================
+
+internal/utils/:
+  ads.go, checkers.go, console.go, dates.go, encoding.go, me.go, merge.go,
+  separate.go, manager.go, sems.go, string.go, text.go
+
+internal/utils/system/:
+  free.go, network.go, priority.go, speed.go, subprocess.go, system.go
+
+internal/paths/:
+  common.go, db.go, manage.go, paths.go, sanitize.go
+
+================================================================================
+PHASE 6: CACHE (internal/cache/) — 4 files
+================================================================================
+
+  internal/cache/cache.go    - Cache interface
+  internal/cache/sqlite.go   - SQLite-backed disk cache
+  internal/cache/json.go     - JSON file-backed cache
+  internal/cache/memory.go   - In-memory cache (disabled mode)
+
+================================================================================
+PHASE 7: DATABASE (internal/db/) — 9+ files + 11 SQL files
+================================================================================
+
+SQL query files (internal/db/queries/):
+  schema.sql, posts.sql, messages.sql, medias.sql, stories.sql,
+  labels.sql, others.sql, products.sql, profiles.sql, models.sql,
+  schema_flags.sql
+
+Go files:
+  internal/db/db.go           - Connection pool + init
+  internal/db/operations.go   - Main operations coordinator
+  internal/db/backup.go       - Database backup
+  internal/db/merge.go        - Database merge
+  internal/db/difference.go   - Database difference
+  internal/db/transition.go   - Schema migration (flags-based)
+  internal/db/wrapper.go      - DB operation wrappers
+  internal/db/convert.go      - Data conversion utils
+  internal/db/empty.go        - Empty/null handling
+
+Tables (10): posts, messages, medias, stories, labels, others, products,
+             profiles, models, schema_flags
+
+================================================================================
+PHASE 8: HASHING (internal/hash/) — 1 file
+================================================================================
+
+  internal/hash/hash.go - XXHash128 file hashing + dedup
+
+================================================================================
+PHASE 9: AUTH (internal/auth/) — 19 files
+================================================================================
+
+  internal/auth/auth.go, cookies.go, file.go, make.go, schema.go,
+  signing.go, headers.go, xbc.go, dict.go, error.go, prompt.go, warning.go
+
+  internal/auth/providers/:
+  provider.go, datawhores.go, digitalcriminals.go, xagler.go, rafa.go,
+  generic.go, manual.go
+
+Signing algorithm:
+  1. Get dynamic rules (static_param, format, checksum_indexes, checksum_constant)
+  2. time2 = current millis as string
+  3. path = URL path + query
+  4. msg = join(static_param, time2, path, user_id) with "\n"
+  5. sha1_hex = SHA1(msg)
+  6. checksum = sum(sha1_hex[i] for i in checksum_indexes) + checksum_constant
+  7. sign = format.format(sha1_hex, abs(checksum))
+  8. headers["sign"] = sign, headers["time"] = time2
+
+================================================================================
+PHASE 10: HTTP SESSION (internal/http/) — 9 files
+================================================================================
+
+  internal/http/client.go, ofsession.go, session_handler.go, request.go,
+  response.go, retry.go, ratelimit.go, sleeper.go, cert.go
+
+Key features:
+  - SessionManager interface: Do(), DoStream(), Close()
+  - AdaptiveSleeper: exponential backoff on 429/403
+  - Token bucket rate limiting via x/time/rate
+  - Retry with avast/retry-go
+
+================================================================================
+PHASE 11: API CLIENT (internal/api/) — 26 files
+================================================================================
+
+  internal/api/client.go, endpoints.go, timeline.go, pinned.go, archived.go,
+  streams.go, messages.go, stories.go, highlights.go, labels.go, lists.go,
+  subscriptions.go, subscriptions_common.go, subscriptions_individual.go,
+  purchased.go, profile.go, me.go, init_ep.go, favorites.go,
+  common_after.go, common_check.go, common_timeline.go,
+  cache_read.go, cache_write.go, logs.go, log_strings.go
+
+Pagination patterns:
+  - Timestamp-based: afterPublishTime (posts, archived, streams)
+  - Message-ID-based: id param (messages)
+  - Offset-based: offset param (subscriptions, labels, highlights, lists)
+
+================================================================================
+PHASE 12: FILTERS (internal/filter/) — 29 files
+================================================================================
+
+  Media filters: type, date, download_type, length, url, viewable, previous,
+                 id, post_id, count, size, dupe, sort
+  Post filters:  date, temp, text, neg_text, mass, ad, sort, dupe
+  Model filters: price, date, flags, subtype, other, sort, logs
+  Core:          filter.go (interfaces + chain)
+
+================================================================================
+PHASE 13: PROMPTS (internal/prompts/) — 13 files
+================================================================================
+
+  internal/prompts/prompts.go, keybindings.go, convert.go, strings.go,
+  validators.go
+
+  internal/prompts/groups/:
+  actions.go, area.go, auth.go, config.go, menu.go, merge.go, misc.go,
+  model.go, profile.go
+
+  internal/prompts/utils/:
+  model_helpers.go, prompt_helpers.go
+
+================================================================================
+PHASE 14: DRM (internal/drm/) — 5 files
+================================================================================
+
+  internal/drm/drm.go       - DRM coordinator + detection
+  internal/drm/dash.go      - DASH MPD manifest parser
+  internal/drm/widevine.go  - Manual Widevine CDM
+  internal/drm/cdrm.go      - CDRM service client
+  internal/drm/license.go   - License URL construction + key cache
+
+================================================================================
+PHASE 15: DOWNLOAD SYSTEM (internal/download/) — 25 files
+================================================================================
+
+  internal/download/download.go, run.go, normal.go, drm_download.go,
+  manager.go, chunk.go, resume.go, speedlimit.go, retries.go, text.go,
+  desc.go, ffmpeg.go, keyhelpers.go, buffer.go, globals.go, log.go,
+  params.go, paths.go, threads.go, workers.go, general.go
+
+  internal/download/progress/:
+  convert.go, update.go
+
+================================================================================
+PHASE 16: SCRIPTS (internal/scripts/) — 7 files
+================================================================================
+
+  internal/scripts/scripts.go, after_download_action.go, after_download.go,
+  after_like_action.go, final.go, naming.go, skip_download.go
+
+================================================================================
+PHASE 17: WORKER POOL (internal/worker/) — 1 file
+================================================================================
+
+  internal/worker/pool.go - Generic worker pool with channels
+
+================================================================================
+PHASE 18: TUI (internal/tui/) — 32 files
+================================================================================
+
+  Core: tui.go, compose.go, constants.go, styles.go
+
+  Fields (11): bool.go, date.go, download.go, media.go, numeric.go,
+               price.go, response.go, select.go, size.go, textsearch.go, time.go
+
+  Inputs (3): filter.go, integer.go, string.go
+
+  Sections (3): sidebar.go, table.go, console.go
+
+  Utils (2): lock.go, names.go
+
+  Live (8): live.go, progress.go, tasks.go, panel.go, screens.go,
+            groups.go, updater.go, clear.go, empty.go
+
+  Live classes (3): progress.go, task.go, transfercol.go
+
+================================================================================
+PHASE 19: COMMANDS + CLI (internal/commands/ + internal/cli/) — ~70 files
+================================================================================
+
+Commands (12):
+  internal/commands/scraper/scraper.go, prepare.go, print.go, jobqueue.go, schedule.go
+  internal/commands/check.go, manual.go, db.go
+  internal/commands/metadata/metadata.go, manager.go, consumer.go, desc.go
+  internal/commands/utils/command.go, scrape_context.go, strings.go
+
+CLI (9 commands):
+  internal/cli/root.go, scraper.go, manual.go, msg_check.go, story_check.go,
+  paid_check.go, post_check.go, metadata.go, db_cmd.go, globals.go, hide_args.go
+
+Flags (18): program.go, logging.go, download.go, media_filter.go, post_filter.go,
+            file.go, automatic.go, user_select.go, user_list.go, user_sort.go,
+            advanced_user_filter.go, advanced_processing.go, advanced_program.go,
+            scripts.go, check.go, metadata_filters.go, shared.go, date_utils.go
+
+Bundles (12): common.go, advanced_common.go, main.go, check.go, msg_check.go,
+              story_check.go, paid_check.go, post_check.go, manual.go,
+              metadata.go, db.go, check_utils.go
+
+Accessors (6): actions.go, areas.go, output.go, quality.go, read.go, time.go
+Callbacks (6): post.go, username.go, choice.go, file.go, string.go, username_parse.go
+Mutators (3): before.go, user.go, write.go
+Types (2): arrow.go, choice.go
+
+================================================================================
+PHASE 20: APP ORCHESTRATOR + ENTRY POINT (internal/app/) — 12 files
+================================================================================
+
+  internal/app/app.go             - App lifecycle orchestrator
+  internal/app/shutdown.go        - Graceful shutdown
+  internal/app/final.go           - Final cleanup + log
+  internal/app/daemon.go          - Daemon mode scheduler
+  internal/app/menu.go            - Interactive menu dispatcher
+  internal/app/manager.go         - Main manager singleton
+  internal/app/model_manager.go   - ModelManager for user processing
+  internal/app/profile_manager.go - Profile management
+  internal/app/stats.go           - Statistics tracking
+  internal/app/post_collection.go - Post collection aggregation
+  internal/app/state.go           - Manager state tracking
+  internal/app/actions.go         - Action routing
+
+  cmd/gofscraper/main.go          - Updated with cobra root command
+
+================================================================================
+KEY INTERFACES
+================================================================================
+
+SessionManager interface {
+    Do(ctx, req) (Response, error)
+    DoStream(ctx, req) (StreamResponse, error)
+    Close() error
+}
+
+SignatureProvider interface {
+    Name() string
+    FetchRules(ctx) (SignatureParams, error)
+}
+
+Signer interface {
+    Sign(url, headers) error
+    MakeHeaders() map[string]string
+    MakeCookies() map[string]string
+}
+
+Downloader interface {
+    Download(ctx, media, session) (DownloadResult, error)
+}
+
+Cache interface {
+    Get(key) ([]byte, bool)
+    Set(key, value, expiry) error
+    Delete(key) error
+    Close() error
+}
+
+ContentFetcher interface {
+    GetTimeline(ctx, modelID, after) ([]Post, error)
+    GetMessages(ctx, modelID, after) ([]Post, error)
+    GetStories(ctx, modelID) ([]Post, error)
+    GetHighlights(ctx, modelID) ([]Post, error)
+    GetPinned(ctx, modelID) ([]Post, error)
+    GetArchived(ctx, modelID, after) ([]Post, error)
+    GetStreams(ctx, modelID, after) ([]Post, error)
+    GetLabels(ctx, modelID) ([]Post, error)
+    GetPurchased(ctx, modelID) ([]Post, error)
+    GetSubscriptions(ctx, subType) ([]User, error)
+    GetProfile(ctx, username) (User, error)
+    GetMe(ctx) (User, error)
+    PostFavorite(ctx, postID, action) error
+}
+
+MediaFilter  func([]Media) []Media
+PostFilter   func([]Post) []Post
+ModelFilter  func([]User) []User
+
+ScriptRunner interface {
+    RunAfterDownloadAction(ctx, username, media, action) error
+    RunAfterDownload(ctx, filePath) error
+    RunAfterLikeAction(ctx, username, posts) error
+    RunNaming(ctx, media) (string, error)
+    RunSkipCheck(ctx, total, media) (bool, error)
+    RunFinal(ctx) error
+}
+
+================================================================================
+DATABASE SCHEMA (10 tables)
+================================================================================
+
+posts:        id, post_id, text, price, paid, archived, pinned, stream, opened, created_at, model_id
+messages:     id, post_id, text, price, paid, archived, created_at, user_id, model_id
+medias:       id, media_id, post_id, link, directory, filename, size, api_type, media_type,
+              preview, linked, downloaded, created_at, posted_at, duration, unlocked, hash, model_id
+stories:      id, post_id, text, price, paid, archived, created_at, model_id
+labels:       id, label_id, name, type, post_id, model_id
+others:       id, post_id, text, price, paid, archived, created_at, model_id
+products:     id, post_id, text, price, paid, archived, created_at, title, model_id
+profiles:     id, user_id, username
+models:       id, model_id
+schema_flags: flag_name (PK), flag_value
+
+================================================================================
+CONCURRENCY DESIGN
+================================================================================
+
+Python asyncio.create_task()      -> errgroup.Go() or go func(){}()
+Python asyncio.as_completed()     -> goroutines + chan Result
+Python asyncio.Semaphore(N)       -> make(chan struct{}, N)
+Python asyncio.Lock()             -> sync.Mutex
+Python asyncio.Queue()            -> chan Job
+Python aiofiles                   -> regular os.File (goroutines don't block)
+Python multiprocessing            -> Not needed (goroutines are lightweight)
+
+================================================================================
+AUTH SIGNING ALGORITHM
+================================================================================
+
+func CreateSign(link string, headers map[string]string, params SignatureParams) {
+    time2 := strconv.FormatInt(time.Now().UnixMilli(), 10)
+    u, _ := url.Parse(link)
+    path := u.Path
+    if u.RawQuery != "" { path += "?" + u.RawQuery }
+
+    msg := strings.Join([]string{params.StaticParam, time2, path, headers["user-id"]}, "\n")
+    h := sha1.New()
+    h.Write([]byte(msg))
+    sha1Hex := hex.EncodeToString(h.Sum(nil))
+
+    checksum := 0
+    for _, idx := range params.ChecksumIndexes {
+        checksum += int(sha1Hex[idx])
+    }
+    checksum += params.ChecksumConstant
+
+    sign := fmt.Sprintf(params.Format, sha1Hex, abs(checksum))
+    headers["sign"] = sign
+    headers["time"] = time2
+}
+
+================================================================================
+ERROR HANDLING
+================================================================================
+
+Structured AppError with codes:
+  ErrAuth, ErrRateLimit, ErrForbidden, ErrNotFound, ErrNetwork,
+  ErrDatabase, ErrFFmpeg, ErrDRM, ErrConfig
+
+HTTP status mapping:
+  429/504 -> ErrRateLimit
+  403     -> ErrForbidden
+  401/400 -> ErrAuth
+
+Individual download failures do NOT abort batch.
+--auth-quit flag for non-interactive auth failure handling.
+
+================================================================================
+VERIFICATION PLAN
+================================================================================
+
+1.  go build ./cmd/gofscraper          — Compiles
+2.  go test ./... -race                — All tests pass
+3.  ./gofscraper --help                — All 8 commands + 100+ flags shown
+4.  ./gofscraper --version             — Version displayed
+5.  Full scrape flow: auth -> subscriptions -> timeline -> download
+6.  Compare output against Python version
+7.  DRM content: manual CDM + CDRM service modes
+8.  Daemon mode: scheduled runs
+9.  Interactive TUI: menus + progress + table views
+10. --no-interactive fallback: plain text output
+11. All 8 commands tested individually
+12. All check commands: table view, filtering, bulk actions
+
+================================================================================
+END OF PLAN
+================================================================================

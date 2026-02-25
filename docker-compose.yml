@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  gofscraper:
+    build: .
+    volumes:
+      - ./config:/root/.config/gofscraper
+      - ./data:/root/Data/ofscraper
+    environment:
+      - OF_AUTH_FILE=/root/.config/gofscraper/auth.json
+      - OF_CONFIG_FILE=/root/.config/gofscraper/config.json
+    restart: unless-stopped
